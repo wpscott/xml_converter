@@ -34,4 +34,5 @@ A Lua script for Aegisub to convert XML Danmu file.
 6. 待运行完成后，会自动为你添加弹幕行，添加的弹幕行的特效被命名为`danmu from xml`，同时启动行会被自动标记为**注释**。
 
 ↓ **一个简单的范例**
+
 ![范例](https://github.com/muhz9786/xml_converter/blob/main/Example.png)
