@@ -206,7 +206,7 @@ function get_data_from_elements(element_list)
         注：一条xml弹幕格式为：
                 <d p="{time}, {type}, {size}, {color}, {timestamp}, {pool}, {uid_crc32}, {row_id}">text</d>
             属性中的参数分别为：
-                视频中的时间, 弹幕类型, 文字大小, 文字颜色, 持续时间, 弹幕池, 用户id(crc32), 弹幕id
+                视频中的时间, 弹幕类型, 文字大小, 文字颜色, unix时间戳, 弹幕池, 用户id(crc32), 弹幕id
     ]]
     local data_list = {}
     for i, element in pairs(element_list) do
