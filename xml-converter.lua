@@ -18,42 +18,79 @@
     * 4. 在启动行中，可以通过 &参数名=值& 的方式修改config表中的默认参数（一对&&中指定一个参数，不区分大小写，无视空格）。
         * 你可以指定的参数主要有：
             * duration - 弹幕持续的时间(单位ms)
-            * interval - 弹幕的前后上下间距(单位px)
-            * max_words - 弹幕内容的最大字符串长度
+            * span - 弹幕的前后上下间距(单位px)
+            * max_length - 弹幕内容的最大字符串长度
             * start_time - 只选取xml弹幕文件的片段，并指定片段开始的时间(格式hh:mm:ss.ms)
             * end_time - 只选取xml弹幕文件的片段，并指定片段结束的时间(格式hh:mm:ss.ms)
             * insert_time - 弹幕字幕在当前视频中的开始时间(格式hh:mm:ss.ms)
     * 5. 使用脚本后，会弹出文件选择对话框，选择需要转换的xml弹幕文件（请确保文件格式正确）。
     * 6. 待运行完成后，会自动为你添加弹幕行，添加的弹幕行的特效被命名为 {下方output_effect字符串} ，同时启动行会被自动标记为注释。
 ]]
-
 local tr = aegisub.gettext
 
-script_name = tr"xml弹幕转字幕"
-script_description = tr"将xml格式的弹幕文件转为字幕(无重叠)。"
+script_name = tr "xml弹幕转字幕"
+script_description = tr "将xml格式的弹幕文件转为字幕(无重叠)。"
 script_author = "muhz"
 script_version = "1.0"
 
 include("karaskel.lua")
 
-local start_effect = "xmlconfig"  -- * 启动行的特效名
-local output_effect = "danmu form xml"  -- * 输出的弹幕行的特效名(只用于标记，无作用)
+local start_effect = "xmlconfig" -- * 启动行的特效名
+local output_effect = "danmu from xml" -- * 输出的弹幕行的特效名(只用于标记，无作用)
 
 -- * 配置变量
 local config = {
     -- * 可指定参数
-    duration = 10 * 1000,  -- 弹幕持续时间(单位ms)
-    interval = 4,  -- 弹幕间间距(前后左右)
-    max_words = nil, -- 弹幕内容的最大字符串长度
+    duration = 10 * 1000, -- 弹幕持续时间(单位ms)
+    span = 4, -- 弹幕间间距(前后左右)
+    max_length = 0, -- 弹幕内容的最大字符串长度
     start_time = 0, -- 截取片段的开始时间
     end_time = 0, -- 截取片段的结束时间
     insert_time = 0, -- 弹幕插入的时间
-
     -- 初始化参数部分(不推荐指定，指定后也不一定会生效)
-    res_x = nil,  -- 视频的横向分辨率
-    res_y = nil,  -- 视频的纵向分辨率
-    bottom = nil,  -- 弹幕区域下底边界y坐标
-    fontsize = nil,  -- 弹幕字体大小
+    res_x = nil, -- 视频的横向分辨率
+    res_y = nil, -- 视频的纵向分辨率
+    reserved_bottom = nil, -- 视频底部保留高度
+    fontsize = nil, -- 弹幕字体大小
+    use_comment_color = false, -- 使用弹幕颜色(BGR)
+    ignore_fixed_comment = false -- 丢弃固定弹幕
+}
+
+local dialog_config = {
+    {class = "label", label = tr "特效名称", x = 0, y = 0},
+    {class = "edit", name = "effect", text = "xmlconfig", x = 1, y = 0},
+    {class = "checkbox", label = tr "使用弹幕颜色", name = "use_comment_color", value = false, x = 0, y = 1, width = 5},
+    {class = "label", label = tr "底部保留高度", x = 0, y = 2},
+    {class = "intedit", name = tr "reserved_bottom", x = 1, y = 2, value = 300, min = 0, max = 2000},
+    {class = "label", label = "px", x = 2, y = 2, width = 3},
+    {class = "label", label = tr "持续时间", x = 0, y = 3},
+    {class = "intedit", name = "duration", x = 1, y = 3, value = 10, min = 10, max = 60},
+    {class = "label", label = tr "秒", x = 2, y = 3, width = 3},
+    {class = "label", label = tr "间距", x = 0, y = 4},
+    {class = "intedit", name = "span", x = 1, y = 4, value = 4, min = 0, max = 30},
+    {class = "label", label = "px", x = 2, y = 4, width = 3},
+    {class = "label", label = tr "弹幕长度", x = 0, y = 5},
+    {class = "intedit", name = "max_length", x = 1, y = 5, value = 0, min = 0, max = 999},
+    {class = "label", label = tr "（0代表无限制）", x = 2, y = 5, width = 3},
+    {class = "label", label = tr "开始时间", x = 0, y = 6},
+    {class = "intedit", name = "start_hour", x = 1, y = 6, value = 0, min = 0, max = 999, hint = tr "时"},
+    {class = "label", label = tr ":", x = 2, y = 6},
+    {class = "intedit", name = "start_minute", x = 3, y = 6, value = 0, min = 0, max = 59, hint = tr "分"},
+    {class = "label", label = tr ":", x = 4, y = 6},
+    {class = "intedit", name = "start_second", x = 5, y = 6, value = 0, min = 0, max = 59, hint = tr "秒"},
+    {class = "label", label = tr "结束时间", x = 0, y = 7},
+    {class = "intedit", name = "end_hour", x = 1, y = 7, value = 0, min = 0, max = 999, hint = tr "时"},
+    {class = "label", label = tr ":", x = 2, y = 7},
+    {class = "intedit", name = "end_minute", x = 3, y = 7, value = 0, min = 0, max = 59, hint = tr "分"},
+    {class = "label", label = tr ":", x = 4, y = 7},
+    {class = "intedit", name = "end_second", x = 5, y = 7, value = 0, min = 0, max = 59, hint = tr "秒"},
+    {class = "label", label = tr "插入时间", x = 0, y = 8},
+    {class = "intedit", name = "insert_hour", x = 1, y = 8, value = 0, min = 0, max = 999, hint = tr "时"},
+    {class = "label", label = tr ":", x = 2, y = 8},
+    {class = "intedit", name = "insert_minute", x = 3, y = 8, value = 0, min = 0, max = 59, hint = tr "分"},
+    {class = "label", label = tr ":", x = 4, y = 8},
+    {class = "intedit", name = "insert_second", x = 5, y = 8, value = 0, min = 0, max = 59, hint = tr "秒"},
+    {class = "checkbox", label = tr "忽略固定弹幕", name = "ignore_fixed_comment", value = false, x = 0, y = 9, width = 5}
 }
 
 -- XML Parser Source: http://lua-users.org/wiki/LuaXml
@@ -151,7 +188,9 @@ function get_path()
     ]]
     -- API提供的文件获取方式
     local path = aegisub.dialog.open("选择xml文件", "", "", "xml Files(.xml)|*.xml|All Files(.)|*.*")
-    if not path then
+    if path then
+        return path
+    else
         -- 取消操作
         aegisub.cancel()
     end
@@ -177,9 +216,9 @@ function get_config_from_text(text)
             2. 通过 &参数=值& 的方式修改默认参数值（不区分大小写，无视空格，一对&&中只能指定一个参数）
     ]]
     if get_position_y(text) then
-        config.bottom = math.floor(tonumber(get_position_y(text)) + 0.5)
+        config.reserved_bottom = math.floor(tonumber(get_position_y(text)) + 0.5)
     else
-        config.bottom = math.floor(config.res_y*0.75 + 0.5)
+        config.reserved_bottom = math.floor(config.res_y * 0.75 + 0.5)
     end
     for param in string.gmatch(text, "&[^&]+&") do
         local equal_pos = string.find(param, "=")
@@ -220,29 +259,35 @@ function get_elements_by_tag(doc, tag)
         解析document并获得指定标签的元素集合
     ]]
     local element_list = {}
-    local start_tag = "<" .. tag
-    local end_tag = "</" .. tag .. ">"
-    local i = 0
-    while i < #doc do
-        i = i + 1
-        -- 标签匹配过程
-        if string.find(doc, start_tag, i) then
-            local start_index = string.find(doc, start_tag, i)
-            if string.find(doc, end_tag, i) then
-                local end_index = string.find(doc, end_tag, i) + #end_tag - 1
-                local element = string.sub(doc, start_index, end_index)
-                table.insert(element_list, element)
-                i = end_index
-            end
+    local xml = collect(doc)
+    for _, value in pairs(xml[2]) do
+        if value.label == tag then
+            table.insert(element_list, value)
         end
     end
+    -- local start_tag = "<" .. tag
+    -- local end_tag = "</" .. tag .. ">"
+    -- local i = 0
+    -- while i < #doc do
+    --     i = i + 1
+    --     -- 标签匹配过程
+    --     if string.find(doc, start_tag, i) then
+    --         local start_index = string.find(doc, start_tag, i)
+    --         if string.find(doc, end_tag, i) then
+    --             local end_index = string.find(doc, end_tag, i) + #end_tag - 1
+    --             local element = string.sub(doc, start_index, end_index)
+    --             table.insert(element_list, element)
+    --             i = end_index
+    --         end
+    --     end
+    -- end
     return element_list
 end
 
 -- * data数据操作方法部分
-function should_drop_data(data)
+function should_ignore_data(data)
     --[[
-        是否舍去data数据
+        是否忽略data数据
     ]]
     if tonumber(data.time)*1000 < config.start_time then
         return true
@@ -250,7 +295,7 @@ function should_drop_data(data)
     if config.end_time ~= 0 and tonumber(data.time)*1000 > config.end_time then
         return true
     end
-    if config.max_words ~= nil and #data.text > config.max_words then
+    if config.ignore_fixed_comment and data.dtype ~= 1 then
         return true
     end
     -- todo 待补充...
@@ -266,10 +311,11 @@ function get_data_from_elements(element_list)
                 视频中的时间, 弹幕类型, 文字大小, 文字颜色, unix时间戳, 弹幕池, 用户id(crc32), 弹幕id
     ]]
     local data_list = {}
-    for i, element in pairs(element_list) do
-        local attributes = string.sub(string.match(element, '"[^"]+"'), 2, -2) -- sub用于去除左右""
-        local text = string.sub(string.match(element, ">[^<]+<"), 2, -2) -- sub用于去除左右><
-        local attribute_list = split(attributes, ",")
+    for _, element in pairs(element_list) do
+        local attribute_list = split(element.xarg.p, ",")
+        -- local attributes = string.sub(string.match(element, '"[^"]+"'), 2, -2) -- sub用于去除左右""
+        -- local text = string.sub(string.match(element, ">[^<]+<"), 2, -2) -- sub用于去除左右><
+        -- local attribute_list = split(attributes, ",")
         local data = {
             -- 各字段含义见函数头部注释
             time = attribute_list[1],
@@ -280,15 +326,14 @@ function get_data_from_elements(element_list)
             pool = attribute_list[6],
             uid_crc32 = attribute_list[7],
             row_id = attribute_list[8],
-            text = text
+            text = element[1]
         }
-        if not should_drop_data(data) then
+        if not should_ignore_data(data) then
             table.insert(data_list, data)
         end
     end
     return data_list
 end
-
 
 -- * 弹幕计算方法部分
 function init_tracks()
@@ -296,7 +341,7 @@ function init_tracks()
         初始化弹幕轨道，返回包含所有可用轨道的列表
     ]]
     -- 通过弹幕区域底边坐标确定轨道数
-    local track_num = math.floor(config.bottom / (config.fontsize + config.interval*2))
+    local track_num = math.floor((config.res_y - config.reserved_bottom) / (config.fontsize + config.span * 2))
     local track_list = {}
     for i = 1, track_num do
         local track = {index = i, rear = nil}
@@ -364,8 +409,20 @@ function get_move_tag(danmu)
     local y1 = danmu.track * config.fontsize + config.interval  -- 通过轨道编号获取y坐标
     local x2 = - danmu.length  -- 终点位置在左侧画面外，为负数
     local y2 = y1
-    local tag = "{\\move(" .. string.format("%d,%d,%d,%d", x1, y1, x2, y2) .. ")}"
-    return tag
+    if config.use_comment_color then
+        return string.format(
+            "{\\move(%d,%d,%d,%d)\\c&H%02X%02X%02X&}",
+            x1,
+            y1,
+            x2,
+            y2,
+            (danmu.color % 256),
+            (math.floor(danmu.color / 256) % 256),
+            (math.floor(danmu.color / 65536) % 256)
+        )
+    else
+        return string.format("{\\move(%d,%d,%d,%d)}", x1, y1, x2, y2)
+    end
 end
 
 function get_line(danmu, line)
@@ -409,12 +466,10 @@ function danmu_to_lines(data_list, line, subs)
     end
 end
 
-
 function convert(subs, sel)
     --[[
         ! 处理函数（主函数）
     ]]
-
     aegisub.progress.title("xml弹幕文件导入")
 
     local meta, styles = karaskel.collect_head(subs, true)
@@ -422,65 +477,67 @@ function convert(subs, sel)
     config.res_x = res_x
     config.res_y = res_y
 
-    aegisub.progress.task("xml文件读取中...")
-    local path = get_path()
-    local doc = get_xml_doc(path)
-    local element_list = get_elements_by_tag(doc, "d")
+    aegisub.progress.task("确认配置数据...")
+    btn, result = aegisub.dialog.display(dialog_config, {tr "继续读取xml文件"})
+    if btn then
+        config.duration = result.duration * 1000
+        config.span = result.span
+        config.max_length = result.max_length
+        config.reserved_bottom = result.reserved_bottom
+        config.start_time = (result.start_hour * 3600 + result.start_minute * 60 + result.start_second) * 1000
+        config.end_time = (result.end_hour * 3600 + result.end_minute * 60 + result.end_second) * 1000
+        config.insert_time = (result.insert_hour * 3600 + result.insert_minute * 60 + result.insert_second) * 1000
+        config.use_comment_color = result.use_comment_color
+        config.ignore_fixed_comment = result.ignore_fixed_comment
 
-    aegisub.progress.task("参数读取中...")
-    local newline = nil
-    local i = 0
-    while i < #subs do
-        i = i + 1
-        local l = subs[i]
-        if l.class == "dialogue" and l.effect == start_effect then
-            newline = table.copy(subs[i])
-            karaskel.preproc_line(subs, meta, styles, l)
-            -- 获取相关参数
-            config.fontsize = l.styleref.fontsize
-            get_config_from_text(l.text)
-            -- 将启动行设置为注释
-            l.comment = true
-            subs[i] = l
+        aegisub.progress.task("特效读取中...")
+        local found_effect = false
+        local newline = nil
+        local i = 0
+        while not found_effect and i < #subs do
+            i = i + 1
+            local l = subs[i]
+            if l.class == "dialogue" and l.effect == result.effect then
+                newline = table.copy(subs[i])
+                karaskel.preproc_line(subs, meta, styles, l)
+                -- 获取相关参数
+                config.fontsize = l.styleref.fontsize
+                -- get_config_from_text(l.text)
+                -- 将启动行设置为注释
+                l.comment = true
+                subs[i] = l
+                found_effect = true
+            end
         end
+
+        if not found_effect then
+            aegisub.cancel()
+            return
+        end
+
+        aegisub.progress.task("xml文件读取中...")
+        local path = get_path()
+        local doc = get_xml_doc(path)
+        local element_list = get_elements_by_tag(doc, "d")
+
+        aegisub.progress.task("字幕写入中...")
+        local data_list = get_data_from_elements(element_list)
+        danmu_to_lines(data_list, newline, subs)
+
+        aegisub.set_undo_point("Undo Point") -- 创建恢复点（API要求）
     end
-
-    aegisub.progress.task("字幕写入中...")
-    local data_list = get_data_from_elements(element_list)
-    danmu_to_lines(data_list, newline, subs)
-
-    aegisub.set_undo_point("Undo Point")  -- 创建恢复点（API要求）
 end
-
 
 function can_convert(subs)
     --[[
         ! 验证函数，检验脚本是否可用
         ]]
-
     local res_x, res_y, ar, artype = aegisub.video_size()
     if res_x == nil then
         return false
     end
-
-    local num_dia = 0
-	for i = 1, #subs do
-		local l = subs[i]
-		if l.class == "dialogue" then
-			num_dia = num_dia + 1
-			-- test if the line is a template
-			if (string.headtail(l.effect)):lower() == start_effect then
-				return true
-			end
-			-- don't try forever, this has to be fast
-			if num_dia > 50 then
-				return false
-			end
-		end
-	end
-	return false
+    return true
 end
 
-
 -- * 注册函数，具体说明请参照API手册
-aegisub.register_macro(tr"xml弹幕转字幕", tr"将xml格式的弹幕文件转为字幕，且无重叠(可在脚本的开头注释中查看简单的使用说明)。", convert, can_convert)
+aegisub.register_macro(tr "xml弹幕转字幕", tr "将xml格式的弹幕文件转为字幕，且无重叠(可在脚本的开头注释中查看简单的使用说明)。", convert, can_convert)
