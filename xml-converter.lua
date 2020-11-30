@@ -163,12 +163,12 @@ local function split(str, separator)
         i = i + 1
         if string.find(str, separator, i) then
             index = string.find(str, separator, i)
-            local slice = string.sub(str, i, index-1)
-            table.insert(slices,slice)
+            local slice = string.sub(str, i, index - 1)
+            table.insert(slices, slice)
             i = index
         else
             local slice = string.sub(str, i, #str)
-            table.insert(slices,slice)
+            table.insert(slices, slice)
             break
         end
     end
@@ -177,9 +177,8 @@ end
 
 function bytime(d2, d1)
     -- 比较方法，返回true时交换位置
-    return tonumber(d2.time) < tonumber(d1.time)
+    return d2.time < d1.time
 end
-
 
 -- * 参数获取方法部分
 function get_path()
@@ -194,7 +193,6 @@ function get_path()
         -- 取消操作
         aegisub.cancel()
     end
-    return path
 end
 
 function get_position_y(text)
@@ -204,7 +202,7 @@ function get_position_y(text)
     local pos_tag = string.match(text, "\\pos([^)]+)")
     local y = nil
     if pos_tag then
-        y = string.sub(pos_tag, string.find(pos_tag, ",")+1, -1)
+        y = string.sub(pos_tag, string.find(pos_tag, ",") + 1, -1)
     end
     return y
 end
@@ -222,18 +220,18 @@ function get_config_from_text(text)
     end
     for param in string.gmatch(text, "&[^&]+&") do
         local equal_pos = string.find(param, "=")
-        local name = string.lower(string.gsub(string.sub(param, 2, equal_pos-1), " ", ""))
-        local value = string.lower(string.gsub(string.sub(param, equal_pos+1, -2), " ", ""))
+        local name = string.lower(string.gsub(string.sub(param, 2, equal_pos - 1), " ", ""))
+        local value = string.lower(string.gsub(string.sub(param, equal_pos + 1, -2), " ", ""))
         for key, v in pairs(config) do
             if name == key then
                 -- 将格式化时间转为ms
                 if name == "start_time" or "end_time" or "inser_time" then
                     local list = split(value, ":")
                     local time = 0
-                    for i=#list, 1, -1 do
-                        time = time + tonumber(list[i])*60^(#list - i)
+                    for i = #list, 1, -1 do
+                        time = time + tonumber(list[i]) * 60 ^ (#list - i)
                     end
-                    value = time*1000
+                    value = time * 1000
                 end
                 config[key] = tonumber(value)
                 break
@@ -242,14 +240,13 @@ function get_config_from_text(text)
     end
 end
 
-
 -- * xml解析方法部分
 function get_xml_doc(path)
     --[[
         从以参数为地址的xml文件中获取document
     ]]
     local file = io.open(path, "r")
-    local doc = file:read("*a")  -- "*a"参数指读取整个文件
+    local doc = file:read("*a") -- "*a"参数指读取整个文件
     file:close()
     return doc
 end
@@ -289,10 +286,13 @@ function should_ignore_data(data)
     --[[
         是否忽略data数据
     ]]
-    if tonumber(data.time)*1000 < config.start_time then
+    if data.time < config.start_time then
         return true
     end
-    if config.end_time ~= 0 and tonumber(data.time)*1000 > config.end_time then
+    if config.end_time ~= 0 and data.time > config.end_time then
+        return true
+    end
+    if config.max_length ~= 0 and #data.text > config.max_length then
         return true
     end
     if config.ignore_fixed_comment and data.dtype ~= 1 then
@@ -318,12 +318,12 @@ function get_data_from_elements(element_list)
         -- local attribute_list = split(attributes, ",")
         local data = {
             -- 各字段含义见函数头部注释
-            time = attribute_list[1],
-            dtype = attribute_list[2],
-            size = attribute_list[3],
-            color = attribute_list[4],
-            timestamp = attribute_list[5],
-            pool = attribute_list[6],
+            time = math.floor(tonumber(attribute_list[1]) * 1000),
+            dtype = tonumber(attribute_list[2]),
+            size = tonumber(attribute_list[3]),
+            color = tonumber(attribute_list[4]),
+            timestamp = tonumber(attribute_list[5]),
+            pool = tonumber(attribute_list[6]),
             uid_crc32 = attribute_list[7],
             row_id = attribute_list[8],
             text = element[1]
@@ -362,8 +362,8 @@ function is_track_conflicted(track, danmu)
             轨道中上一条弹幕与当前弹幕的追击问题，
             若相遇时间小于弹幕持续时间（即会在视频区域显示），则判断为冲突
     ]]
-    local v1 = (track.rear.length + config.res_x) / config.duration  -- 前一条弹幕
-    local v2 = (danmu.length + config.res_x) / config.duration  -- 当前弹幕
+    local v1 = (track.rear.length + config.res_x) / config.duration -- 前一条弹幕
+    local v2 = (danmu.length + config.res_x) / config.duration -- 当前弹幕
 
     -- 若两条弹幕时间差大于弹幕持续时间，说明上条弹幕已在显示区域外，判定为不冲突
     local dt = danmu.time - track.rear.time
@@ -374,7 +374,7 @@ function is_track_conflicted(track, danmu)
         else
             -- 条件1：若 v1 > v2 说明不会相遇。
             -- 条件2：根据公式推导可知，相遇时间 t0 = (dt*v1 - l1) / (v2 - v1)
-            if v1 < v2 and (dt*v1-track.rear.length) / (v2-v1) < (config.duration-dt) then
+            if v1 < v2 and (dt * v1 - track.rear.length) / (v2 - v1) < (config.duration - dt) then
                 return true
             end
         end
@@ -388,15 +388,14 @@ function push_danmu_into_track(track_list, danmu)
     ]]
     for index, track in pairs(track_list) do
         if is_track_empty(track) or not is_track_conflicted(track, danmu) then
-            track.rear = danmu  -- 更新轨道队尾弹幕
-            danmu.track = track.index  -- 弹幕关联轨道序号
+            track.rear = danmu -- 更新轨道队尾弹幕
+            danmu.track = track.index -- 弹幕关联轨道序号
             break
         --else
         -- todo: 无可用轨道时的处理规则待补充...(思路：过滤短时间内同id同内容弹幕)
         end
     end
 end
-
 
 -- * 字幕line写入方法部分
 function get_move_tag(danmu)
@@ -406,8 +405,8 @@ function get_move_tag(danmu)
         含义： 开始位置坐标(x1,y1), 终点位置坐标(x2,y2)
     ]]
     local x1 = config.res_x
-    local y1 = danmu.track * config.fontsize + config.interval  -- 通过轨道编号获取y坐标
-    local x2 = - danmu.length  -- 终点位置在左侧画面外，为负数
+    local y1 = danmu.track * config.fontsize + config.span -- 通过轨道编号获取y坐标
+    local x2 = -danmu.length -- 终点位置在左侧画面外，为负数
     local y2 = y1
     if config.use_comment_color then
         return string.format(
@@ -451,10 +450,11 @@ function danmu_to_lines(data_list, line, subs)
     local track_list = init_tracks()
     for index, data in pairs(data_list) do
         local danmu = {
-            time = math.floor(tonumber(data.time) * 1000),  -- data中的时间单位为s, line中的时间单位为ms
+            time = data.time,
+            color = data.color,
             text = data.text,
-            length = #data.text * config.fontsize + config.interval*2,
-            track = 0  -- 未/无法添加入轨道时为0
+            length = #data.text * config.fontsize + config.span * 2,
+            track = 0 -- 未/无法添加入轨道时为0
         }
         push_danmu_into_track(track_list, danmu)
         if danmu.track ~= 0 then
